@@ -1,5 +1,18 @@
 package uk.gov.hmcts.ccd.domain.service.startevent;
 
+import java.util.Optional;
+
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.sameInstance;
+import static org.junit.jupiter.api.Assertions.assertAll;
+import static org.mockito.Matchers.eq;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.verify;
+import static uk.gov.hmcts.ccd.domain.service.common.TestBuildersUtil.CaseDetailsBuilder.newCaseDetails;
+import static uk.gov.hmcts.ccd.domain.service.common.TestBuildersUtil.CaseTypeBuilder.newCaseType;
+
 import com.google.common.collect.Maps;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -13,17 +26,6 @@ import uk.gov.hmcts.ccd.domain.model.definition.CaseDetails;
 import uk.gov.hmcts.ccd.domain.model.definition.CaseType;
 import uk.gov.hmcts.ccd.domain.service.common.CaseDataService;
 import uk.gov.hmcts.ccd.domain.service.common.SecurityClassificationService;
-
-import java.util.Optional;
-
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.*;
-import static org.junit.jupiter.api.Assertions.assertAll;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.verify;
-import static uk.gov.hmcts.ccd.domain.service.common.TestBuildersUtil.CaseDetailsBuilder.newCaseDetails;
-import static uk.gov.hmcts.ccd.domain.service.common.TestBuildersUtil.CaseTypeBuilder.newCaseType;
 
 class ClassifiedStartEventOperationTest {
 
@@ -73,24 +75,43 @@ class ClassifiedStartEventOperationTest {
     }
 
     @Nested
-    @DisplayName("for case type")
-    class ForCaseType {
+    @DisplayName("for case type - deprecated")
+    class ForCaseTypeDeprecated {
 
         @Test
         @DisplayName("should call decorated start event operation as is")
         void shouldCallDecoratedStartEventOperation() {
-            doReturn(startEvent).when(startEventOperation).triggerStartForCaseType(UID, JURISDICTION_ID, CASE_TYPE_ID, EVENT_TRIGGER_ID, IGNORE_WARNING);
+            doReturn(startEvent).when(startEventOperation).triggerStartForCaseType(CASE_TYPE_ID, EVENT_TRIGGER_ID, IGNORE_WARNING);
 
-            final StartEventTrigger output = classifiedStartEventOperation.triggerStartForCaseType(UID,
-                                                                                                   JURISDICTION_ID,
-                                                                                                   CASE_TYPE_ID,
+            final StartEventTrigger output = classifiedStartEventOperation.triggerStartForCaseType(CASE_TYPE_ID,
                                                                                                    EVENT_TRIGGER_ID,
                                                                                                    IGNORE_WARNING);
 
             assertAll(
                 () -> assertThat(output, sameInstance(startEvent)),
                 () -> assertThat(output.getCaseDetails(), sameInstance(caseDetails)),
-                () -> verify(startEventOperation).triggerStartForCaseType(UID, JURISDICTION_ID, CASE_TYPE_ID, EVENT_TRIGGER_ID, IGNORE_WARNING)
+                () -> verify(startEventOperation).triggerStartForCaseType(CASE_TYPE_ID, EVENT_TRIGGER_ID, IGNORE_WARNING)
+            );
+        }
+    }
+
+    @Nested
+    @DisplayName("for case type")
+    class ForCaseType {
+
+        @Test
+        @DisplayName("should call decorated start event operation as is")
+        void shouldCallDecoratedStartEventOperation() {
+            doReturn(startEvent).when(startEventOperation).triggerStartForCaseType(CASE_TYPE_ID, EVENT_TRIGGER_ID, IGNORE_WARNING);
+
+            final StartEventTrigger output = classifiedStartEventOperation.triggerStartForCaseType(CASE_TYPE_ID,
+                                                                                                   EVENT_TRIGGER_ID,
+                                                                                                   IGNORE_WARNING);
+
+            assertAll(
+                () -> assertThat(output, sameInstance(startEvent)),
+                () -> assertThat(output.getCaseDetails(), sameInstance(caseDetails)),
+                () -> verify(startEventOperation).triggerStartForCaseType(CASE_TYPE_ID, EVENT_TRIGGER_ID, IGNORE_WARNING)
             );
         }
     }
@@ -101,10 +122,7 @@ class ClassifiedStartEventOperationTest {
 
         @BeforeEach
         void setUp() {
-            doReturn(startEvent).when(startEventOperation).triggerStartForCase(UID,
-                                                                               JURISDICTION_ID,
-                                                                               CASE_TYPE_ID,
-                                                                               CASE_REFERENCE,
+            doReturn(startEvent).when(startEventOperation).triggerStartForCase(CASE_REFERENCE,
                                                                                EVENT_TRIGGER_ID,
                                                                                IGNORE_WARNING);
         }
@@ -113,9 +131,13 @@ class ClassifiedStartEventOperationTest {
         @DisplayName("should call decorated start event operation as is")
         void shouldCallDecoratedStartEventOperation() {
 
-            classifiedStartEventOperation.triggerStartForCase(UID, JURISDICTION_ID, CASE_TYPE_ID, CASE_REFERENCE, EVENT_TRIGGER_ID, IGNORE_WARNING);
+            classifiedStartEventOperation.triggerStartForCase(CASE_REFERENCE,
+                                                              EVENT_TRIGGER_ID,
+                                                              IGNORE_WARNING);
 
-            verify(startEventOperation).triggerStartForCase(UID, JURISDICTION_ID, CASE_TYPE_ID, CASE_REFERENCE, EVENT_TRIGGER_ID, IGNORE_WARNING);
+            verify(startEventOperation).triggerStartForCase(CASE_REFERENCE,
+                                                            EVENT_TRIGGER_ID,
+                                                            IGNORE_WARNING);
         }
 
         @Test
@@ -123,10 +145,7 @@ class ClassifiedStartEventOperationTest {
         void shouldReturnEventTriggerWhenCaseDetailsNull() {
             startEvent.setCaseDetails(null);
 
-            final StartEventTrigger output = classifiedStartEventOperation.triggerStartForCase(UID,
-                                                                                               JURISDICTION_ID,
-                                                                                               CASE_TYPE_ID,
-                                                                                               CASE_REFERENCE,
+            final StartEventTrigger output = classifiedStartEventOperation.triggerStartForCase(CASE_REFERENCE,
                                                                                                EVENT_TRIGGER_ID,
                                                                                                IGNORE_WARNING);
 
@@ -140,10 +159,7 @@ class ClassifiedStartEventOperationTest {
         @DisplayName("should return event trigger with classified case details when not null")
         void shouldReturnEventTriggerWithClassifiedCaseDetails() {
 
-            final StartEventTrigger output = classifiedStartEventOperation.triggerStartForCase(UID,
-                                                                                               JURISDICTION_ID,
-                                                                                               CASE_TYPE_ID,
-                                                                                               CASE_REFERENCE,
+            final StartEventTrigger output = classifiedStartEventOperation.triggerStartForCase(CASE_REFERENCE,
                                                                                                EVENT_TRIGGER_ID,
                                                                                                IGNORE_WARNING);
 

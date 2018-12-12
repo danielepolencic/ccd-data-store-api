@@ -1,5 +1,13 @@
 package uk.gov.hmcts.ccd.domain.model.definition;
 
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
+
+import static java.util.Optional.ofNullable;
+import static org.apache.http.HttpStatus.SC_OK;
+import static uk.gov.hmcts.ccd.data.casedetails.search.MetaData.CaseField.*;
+
 import com.fasterxml.jackson.annotation.JsonGetter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -13,23 +21,9 @@ import org.springframework.http.ResponseEntity;
 import uk.gov.hmcts.ccd.data.casedetails.SecurityClassification;
 import uk.gov.hmcts.ccd.domain.model.callbacks.AfterSubmitCallbackResponse;
 
-import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.Map;
-
-import static java.util.Optional.ofNullable;
-import static org.apache.http.HttpStatus.SC_OK;
-import static uk.gov.hmcts.ccd.data.casedetails.search.MetaData.CaseField.CASE_REFERENCE;
-import static uk.gov.hmcts.ccd.data.casedetails.search.MetaData.CaseField.CASE_TYPE;
-import static uk.gov.hmcts.ccd.data.casedetails.search.MetaData.CaseField.CREATED_DATE;
-import static uk.gov.hmcts.ccd.data.casedetails.search.MetaData.CaseField.JURISDICTION;
-import static uk.gov.hmcts.ccd.data.casedetails.search.MetaData.CaseField.LAST_MODIFIED_DATE;
-import static uk.gov.hmcts.ccd.data.casedetails.search.MetaData.CaseField.SECURITY_CLASSIFICATION;
-import static uk.gov.hmcts.ccd.data.casedetails.search.MetaData.CaseField.STATE;
-
 public class CaseDetails implements Cloneable {
+    public static final String LABEL_FIELD_TYPE = "Label";
     private static final Logger LOG = LoggerFactory.getLogger(CaseDetails.class);
-    private static final String LABEL_FIELD_TYPE = "Label";
     private static final String CASE_PAYMENT_HISTORY_VIEWER_FIELD_TYPE = "CasePaymentHistoryViewer";
     public static final String DRAFT_ID = "DRAFT%s";
 

@@ -1,10 +1,10 @@
 package uk.gov.hmcts.ccd.domain.model.std;
 
+import java.util.Map;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.ToString;
-
-import java.util.Map;
 
 @ToString
 public class CaseDataContent {
@@ -67,7 +67,7 @@ public class CaseDataContent {
     }
 
     public Boolean getIgnoreWarning() {
-        return ignoreWarning;
+        return ignoreWarning == null ? Boolean.FALSE : ignoreWarning;
     }
 
     public void setIgnoreWarning(Boolean ignoreWarning) {

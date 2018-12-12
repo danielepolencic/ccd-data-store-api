@@ -1,23 +1,26 @@
 package uk.gov.hmcts.ccd.endpoint.std;
 
+import javax.transaction.Transactional;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Stream;
+
+import static java.util.stream.Collectors.toList;
+import static uk.gov.hmcts.ccd.data.casedetails.search.MetaData.CaseField.*;
+import static uk.gov.hmcts.ccd.data.casedetails.search.MetaData.PAGE_PARAM;
+import static uk.gov.hmcts.ccd.data.casedetails.search.MetaData.SORT_PARAM;
+
 import com.fasterxml.jackson.databind.JsonNode;
-import io.swagger.annotations.Api;
-import io.swagger.annotations.ApiOperation;
-import io.swagger.annotations.ApiParam;
-import io.swagger.annotations.ApiResponse;
-import io.swagger.annotations.ApiResponses;
+import io.swagger.annotations.*;
 import org.apache.commons.lang3.EnumUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestMethod;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import uk.gov.hmcts.ccd.AppInsights;
 import uk.gov.hmcts.ccd.data.casedetails.SecurityClassification;
 import uk.gov.hmcts.ccd.data.casedetails.search.FieldMapSanitizeOperation;
@@ -29,6 +32,7 @@ import uk.gov.hmcts.ccd.domain.model.definition.Document;
 import uk.gov.hmcts.ccd.domain.model.std.CaseDataContent;
 import uk.gov.hmcts.ccd.domain.service.createcase.CreateCaseOperation;
 import uk.gov.hmcts.ccd.domain.service.createevent.CreateEventOperation;
+import uk.gov.hmcts.ccd.domain.service.createevent.MidEventCallback;
 import uk.gov.hmcts.ccd.domain.service.getcase.CaseNotFoundException;
 import uk.gov.hmcts.ccd.domain.service.getcase.CreatorGetCaseOperation;
 import uk.gov.hmcts.ccd.domain.service.getcase.GetCaseOperation;
@@ -40,23 +44,6 @@ import uk.gov.hmcts.ccd.domain.service.stdapi.DocumentsOperation;
 import uk.gov.hmcts.ccd.domain.service.validate.ValidateCaseFieldsOperation;
 import uk.gov.hmcts.ccd.endpoint.exceptions.ApiException;
 import uk.gov.hmcts.ccd.endpoint.exceptions.BadRequestException;
-
-import javax.transaction.Transactional;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.stream.Stream;
-
-import static java.util.stream.Collectors.toList;
-import static uk.gov.hmcts.ccd.data.casedetails.search.MetaData.CaseField.CASE_REFERENCE;
-import static uk.gov.hmcts.ccd.data.casedetails.search.MetaData.CaseField.CREATED_DATE;
-import static uk.gov.hmcts.ccd.data.casedetails.search.MetaData.CaseField.LAST_MODIFIED_DATE;
-import static uk.gov.hmcts.ccd.data.casedetails.search.MetaData.CaseField.SECURITY_CLASSIFICATION;
-import static uk.gov.hmcts.ccd.data.casedetails.search.MetaData.CaseField.STATE;
-import static uk.gov.hmcts.ccd.data.casedetails.search.MetaData.PAGE_PARAM;
-import static uk.gov.hmcts.ccd.data.casedetails.search.MetaData.SORT_PARAM;
 
 @RestController
 @RequestMapping(path = "/",
@@ -74,6 +61,7 @@ public class CaseDetailsEndpoint {
     private final AppInsights appInsights;
     private final FieldMapSanitizeOperation fieldMapSanitizeOperation;
     private final ValidateCaseFieldsOperation validateCaseFieldsOperation;
+    private final MidEventCallback midEventCallback;
 
     @Autowired
     public CaseDetailsEndpoint(@Qualifier(CreatorGetCaseOperation.QUALIFIER) final GetCaseOperation getCaseOperation,
@@ -85,6 +73,7 @@ public class CaseDetailsEndpoint {
                                final ValidateCaseFieldsOperation validateCaseFieldsOperation,
                                final DocumentsOperation documentsOperation,
                                final PaginatedSearchMetaDataOperation paginatedSearchMetaDataOperation,
+                               final MidEventCallback midEventCallback,
                                final AppInsights appinsights) {
         this.getCaseOperation = getCaseOperation;
         this.createCaseOperation = createCaseOperation;
@@ -95,11 +84,12 @@ public class CaseDetailsEndpoint {
         this.documentsOperation = documentsOperation;
         this.validateCaseFieldsOperation = validateCaseFieldsOperation;
         this.paginatedSearchMetaDataOperation = paginatedSearchMetaDataOperation;
+        this.midEventCallback = midEventCallback;
         this.appInsights = appinsights;
     }
 
     @Transactional
-    @RequestMapping(value = "/caseworkers/{uid}/jurisdictions/{jid}/case-types/{ctid}/cases/{cid}", method = RequestMethod.GET)
+    @GetMapping(value = "/caseworkers/{uid}/jurisdictions/{jid}/case-types/{ctid}/cases/{cid}")
     @ApiOperation(value = "Get case", notes = "Retrieve an existing case with its state and data")
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "Case found for the given ID"),
@@ -125,7 +115,7 @@ public class CaseDetailsEndpoint {
     }
 
     @Transactional
-    @RequestMapping(value = "/citizens/{uid}/jurisdictions/{jid}/case-types/{ctid}/cases/{cid}", method = RequestMethod.GET)
+    @GetMapping(value = "/citizens/{uid}/jurisdictions/{jid}/case-types/{ctid}/cases/{cid}")
     @ApiOperation(value = "Get case", notes = "Retrieve an existing case with its state and data")
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "Case found for the given ID"),
@@ -147,7 +137,7 @@ public class CaseDetailsEndpoint {
     }
 
     @Transactional
-    @RequestMapping(value = "/caseworkers/{uid}/jurisdictions/{jid}/case-types/{ctid}/cases/{cid}/event-triggers/{etid}/token", method = RequestMethod.GET)
+    @GetMapping(value = "/caseworkers/{uid}/jurisdictions/{jid}/case-types/{ctid}/cases/{cid}/event-triggers/{etid}/token")
     @ApiOperation(value = "Start event creation as Case worker", notes = "Start the event creation process for an existing case. Triggers `AboutToStart` callback.")
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "Event creation process started"),
@@ -168,11 +158,11 @@ public class CaseDetailsEndpoint {
         @ApiParam(value = "Should `AboutToStart` callback warnings be ignored")
         @RequestParam(value = "ignore-warning", required = false) final Boolean ignoreWarning) {
 
-        return startEventOperation.triggerStartForCase(uid, jurisdictionId, caseTypeId, caseId, eventTriggerId, ignoreWarning);
+        return startEventOperation.triggerStartForCase(caseId, eventTriggerId, ignoreWarning);
     }
 
     @Transactional
-    @RequestMapping(value = "/citizens/{uid}/jurisdictions/{jid}/case-types/{ctid}/cases/{cid}/event-triggers/{etid}/token", method = RequestMethod.GET)
+    @GetMapping(value = "/citizens/{uid}/jurisdictions/{jid}/case-types/{ctid}/cases/{cid}/event-triggers/{etid}/token")
     @ApiOperation(value = "Start event creation as Citizen", notes = "Start the event creation process for an existing case. Triggers `AboutToStart` callback.")
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "Event creation process started"),
@@ -193,11 +183,11 @@ public class CaseDetailsEndpoint {
         @ApiParam(value = "Should `AboutToStart` callback warnings be ignored")
         @RequestParam(value = "ignore-warning", required = false) final Boolean ignoreWarning) {
 
-        return startEventOperation.triggerStartForCase(uid, jurisdictionId, caseTypeId, caseId, eventTriggerId, ignoreWarning);
+        return startEventOperation.triggerStartForCase(caseId, eventTriggerId, ignoreWarning);
     }
 
     @Transactional
-    @RequestMapping(value = "/caseworkers/{uid}/jurisdictions/{jid}/case-types/{ctid}/event-triggers/{etid}/token", method = RequestMethod.GET)
+    @GetMapping(value = "/caseworkers/{uid}/jurisdictions/{jid}/case-types/{ctid}/event-triggers/{etid}/token")
     @ApiOperation(value = "Start case creation as Case worker", notes = "Start the case creation process for a new case. Triggers `AboutToStart` callback.")
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "Case creation process started"),
@@ -215,11 +205,11 @@ public class CaseDetailsEndpoint {
         @ApiParam(value = "Should `AboutToStart` callback warnings be ignored")
         @RequestParam(value = "ignore-warning", required = false) final Boolean ignoreWarning) {
 
-        return startEventOperation.triggerStartForCaseType(uid, jurisdictionId, caseTypeId, eventTriggerId, ignoreWarning);
+        return startEventOperation.triggerStartForCaseType(caseTypeId, eventTriggerId, ignoreWarning);
     }
 
     @Transactional
-    @RequestMapping(value = "/citizens/{uid}/jurisdictions/{jid}/case-types/{ctid}/event-triggers/{etid}/token", method = RequestMethod.GET)
+    @GetMapping(value = "/citizens/{uid}/jurisdictions/{jid}/case-types/{ctid}/event-triggers/{etid}/token")
     @ApiOperation(value = "Start case creation as Citizen", notes = "Start the case creation process for a new case. Triggers `AboutToStart` callback.")
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "Case creation process started"),
@@ -237,10 +227,10 @@ public class CaseDetailsEndpoint {
         @ApiParam(value = "Should `AboutToStart` callback warnings be ignored")
         @RequestParam(value = "ignore-warning", required = false) final Boolean ignoreWarning) {
 
-        return startEventOperation.triggerStartForCaseType(uid, jurisdictionId, caseTypeId, eventTriggerId, ignoreWarning);
+        return startEventOperation.triggerStartForCaseType(caseTypeId, eventTriggerId, ignoreWarning);
     }
 
-    @RequestMapping(value = "/caseworkers/{uid}/jurisdictions/{jid}/case-types/{ctid}/cases", method = RequestMethod.POST)
+    @PostMapping(value = "/caseworkers/{uid}/jurisdictions/{jid}/case-types/{ctid}/cases")
     @ResponseStatus(HttpStatus.CREATED)
     @ApiOperation(
         value = "Submit case creation as Case worker",
@@ -265,7 +255,7 @@ public class CaseDetailsEndpoint {
         return createCaseOperation.createCaseDetails(uid, jurisdictionId, caseTypeId, content, ignoreWarning);
     }
 
-    @RequestMapping(value = "/citizens/{uid}/jurisdictions/{jid}/case-types/{ctid}/cases", method = RequestMethod.POST)
+    @PostMapping(value = "/citizens/{uid}/jurisdictions/{jid}/case-types/{ctid}/cases")
     @ResponseStatus(HttpStatus.CREATED)
     @ApiOperation(
         value = "Submit case creation as Citizen",
@@ -290,7 +280,8 @@ public class CaseDetailsEndpoint {
         return createCaseOperation.createCaseDetails(uid, jurisdictionId, caseTypeId, content, ignoreWarning);
     }
 
-    @RequestMapping(value = "/caseworkers/{uid}/jurisdictions/{jid}/case-types/{ctid}/validate", method = RequestMethod.POST)
+    @PostMapping(value = {"/caseworkers/{uid}/jurisdictions/{jid}/case-types/{ctid}/validate",
+        "/citizens/{uid}/jurisdictions/{jid}/case-types/{ctid}/validate"})
     @ResponseStatus(HttpStatus.OK)
     @ApiOperation(
         value = "Validate a set of fields as Case worker",
@@ -301,41 +292,32 @@ public class CaseDetailsEndpoint {
         @ApiResponse(code = 422, message = "Field validation failed"),
         @ApiResponse(code = 409, message = "Case reference not unique")
     })
-    public Map<String, JsonNode> validateCaseDetailsForCaseWorker(
+    public JsonNode validateCaseDetails(
         @ApiParam(value = "Idam user ID", required = true)
         @PathVariable("uid") final String uid,
         @ApiParam(value = "Jurisdiction ID", required = true)
         @PathVariable("jid") final String jurisdictionId,
         @ApiParam(value = "Case type ID", required = true)
         @PathVariable("ctid") final String caseTypeId,
+        @ApiParam(value = "Page ID")
+        @RequestParam(required = false) final String pageId,
         @RequestBody final CaseDataContent content) {
-        return validateCaseFieldsOperation.validateCaseDetails(jurisdictionId, caseTypeId, content.getEvent(), content.getData());
-    }
 
-    @RequestMapping(value = "/citizens/{uid}/jurisdictions/{jid}/case-types/{ctid}/validate", method = RequestMethod.POST)
-    @ResponseStatus(HttpStatus.OK)
-    @ApiOperation(
-        value = "Validate a set of fields as Citizen",
-        notes = "Validate the case data entered during the case/event creation process."
-    )
-    @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "Validation OK"),
-        @ApiResponse(code = 422, message = "Field validation failed"),
-        @ApiResponse(code = 409, message = "Case reference not unique")
-    })
-    public Map<String, JsonNode> validateCaseDetailsForCitizen(
-        @ApiParam(value = "Idam user ID", required = true)
-        @PathVariable("uid") final String uid,
-        @ApiParam(value = "Jurisdiction ID", required = true)
-        @PathVariable("jid") final String jurisdictionId,
-        @ApiParam(value = "Case type ID", required = true)
-        @PathVariable("ctid") final String caseTypeId,
-        @RequestBody final CaseDataContent content) {
-        return validateCaseFieldsOperation.validateCaseDetails(jurisdictionId, caseTypeId, content.getEvent(), content.getData());
+        Map<String, JsonNode> data = validateCaseFieldsOperation.validateCaseDetails(jurisdictionId,
+            caseTypeId,
+            content.getEvent(),
+            content.getData());
+
+        return midEventCallback.invoke(jurisdictionId,
+            caseTypeId,
+            content.getEvent(),
+            data,
+            pageId,
+            content.getIgnoreWarning());
     }
 
     @Transactional
-    @RequestMapping(value = "/caseworkers/{uid}/jurisdictions/{jid}/case-types/{ctid}/cases/{cid}/events", method = RequestMethod.POST)
+    @PostMapping(value = "/caseworkers/{uid}/jurisdictions/{jid}/case-types/{ctid}/cases/{cid}/events")
     @ResponseStatus(HttpStatus.CREATED)
     @ApiOperation(
         value = "Submit event creation as Case worker",
@@ -360,7 +342,7 @@ public class CaseDetailsEndpoint {
     }
 
     @Transactional
-    @RequestMapping(value = "/citizens/{uid}/jurisdictions/{jid}/case-types/{ctid}/cases/{cid}/events", method = RequestMethod.POST)
+    @PostMapping(value = "/citizens/{uid}/jurisdictions/{jid}/case-types/{ctid}/cases/{cid}/events")
     @ResponseStatus(HttpStatus.CREATED)
     @ApiOperation(
         value = "Submit event creation as Citizen",
@@ -385,7 +367,7 @@ public class CaseDetailsEndpoint {
     }
 
     @Transactional
-    @RequestMapping(value = "/caseworkers/{uid}/jurisdictions/{jid}/case-types/{ctid}/cases/{cid}/documents", method = RequestMethod.GET)
+    @GetMapping(value = "/caseworkers/{uid}/jurisdictions/{jid}/case-types/{ctid}/cases/{cid}/documents")
     @ApiOperation(value = "Get a list of printable documents for the given case type ")
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "Documents list for the given case type and id")
@@ -402,7 +384,7 @@ public class CaseDetailsEndpoint {
     }
 
     @Transactional
-    @RequestMapping(value = "/caseworkers/{uid}/jurisdictions/{jid}/case-types/{ctid}/cases", method = RequestMethod.GET)
+    @GetMapping(value = "/caseworkers/{uid}/jurisdictions/{jid}/case-types/{ctid}/cases")
     @ApiOperation(value = "Get case data for a given case type")
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "List of case data for the given search criteria")})
@@ -413,7 +395,7 @@ public class CaseDetailsEndpoint {
     }
 
     @Transactional
-    @RequestMapping(value = "/citizens/{uid}/jurisdictions/{jid}/case-types/{ctid}/cases", method = RequestMethod.GET)
+    @GetMapping(value = "/citizens/{uid}/jurisdictions/{jid}/case-types/{ctid}/cases")
     @ApiOperation(value = "Get case data for a given case type")
     @ApiResponses(value = {
         @ApiResponse(code = 200, message = "List of case data for the given search criteria")})
@@ -435,7 +417,7 @@ public class CaseDetailsEndpoint {
     }
 
     @Transactional
-    @RequestMapping(value = "/caseworkers/{uid}/jurisdictions/{jid}/case-types/{ctid}/cases/pagination_metadata", method = RequestMethod.GET)
+    @GetMapping(value = "/caseworkers/{uid}/jurisdictions/{jid}/case-types/{ctid}/cases/pagination_metadata")
     @ApiOperation(value = "Get the pagination metadata for a case data search")
     @ApiResponses(value = {
             @ApiResponse(code = 200, message = "Pagination metadata for the given search criteria")})
@@ -446,7 +428,7 @@ public class CaseDetailsEndpoint {
     }
 
     @Transactional
-    @RequestMapping(value = "/citizens/{uid}/jurisdictions/{jid}/case-types/{ctid}/cases/pagination_metadata", method = RequestMethod.GET)
+    @GetMapping(value = "/citizens/{uid}/jurisdictions/{jid}/case-types/{ctid}/cases/pagination_metadata")
     @ApiOperation(value = "Get the pagination metadata for a case data search")
     @ApiResponses(value = {
             @ApiResponse(code = 200, message = "Pagination metadata for the given search criteria")})

@@ -1,12 +1,30 @@
 package uk.gov.hmcts.ccd.domain.service.aggregated;
 
+import java.util.List;
+import java.util.Optional;
+
+import static org.hamcrest.CoreMatchers.equalTo;
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.Matchers.hasProperty;
+import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.core.StringStartsWith.startsWith;
+import static org.junit.Assert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertAll;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.when;
+
 import org.assertj.core.util.Lists;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import uk.gov.hmcts.ccd.data.casedetails.CaseDetailsRepository;
 import uk.gov.hmcts.ccd.data.definition.CaseDefinitionRepository;
 import uk.gov.hmcts.ccd.data.definition.UIDefinitionRepository;
 import uk.gov.hmcts.ccd.domain.model.aggregated.CaseEventTrigger;
@@ -15,20 +33,11 @@ import uk.gov.hmcts.ccd.domain.model.aggregated.CaseViewFieldBuilder;
 import uk.gov.hmcts.ccd.domain.model.callbacks.StartEventTrigger;
 import uk.gov.hmcts.ccd.domain.model.definition.*;
 import uk.gov.hmcts.ccd.domain.service.common.EventTriggerService;
+import uk.gov.hmcts.ccd.domain.service.common.UIDService;
+import uk.gov.hmcts.ccd.domain.service.getcase.CaseNotFoundException;
 import uk.gov.hmcts.ccd.domain.service.startevent.StartEventOperation;
+import uk.gov.hmcts.ccd.endpoint.exceptions.BadRequestException;
 import uk.gov.hmcts.ccd.endpoint.exceptions.ResourceNotFoundException;
-
-import java.util.List;
-
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.Matchers.hasProperty;
-import static org.hamcrest.Matchers.nullValue;
-import static org.junit.Assert.assertThat;
-import static org.junit.jupiter.api.Assertions.assertAll;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.when;
 
 class DefaultGetEventTriggerOperationTest {
 
@@ -57,6 +66,9 @@ class DefaultGetEventTriggerOperationTest {
     private CaseDefinitionRepository caseDefinitionRepository;
 
     @Mock
+    private CaseDetailsRepository caseDetailsRepository;
+
+    @Mock
     private CaseViewFieldBuilder caseViewFieldBuilder;
 
     @Mock
@@ -67,6 +79,9 @@ class DefaultGetEventTriggerOperationTest {
 
     @Mock
     private StartEventOperation startEventOperation;
+
+    @Mock
+    private UIDService uidService;
 
     private DefaultGetEventTriggerOperation defaultGetEventTriggerOperation;
 
@@ -80,21 +95,24 @@ class DefaultGetEventTriggerOperationTest {
         caseType.setEvents(events);
         caseType.setCaseFields(caseFields);
 
+        caseDetails.setCaseTypeId(CASE_TYPE_ID);
         startEventTrigger.setCaseDetails(caseDetails);
         startEventTrigger.setToken(TOKEN);
 
         defaultGetEventTriggerOperation = new DefaultGetEventTriggerOperation(
             caseDefinitionRepository,
+            caseDetailsRepository,
             eventTriggerService,
             caseViewFieldBuilder,
             uiDefinitionRepository,
+            uidService,
             startEventOperation);
 
+        doReturn(true).when(uidService).validateUID(CASE_REFERENCE);
+        doReturn(Optional.of(caseDetails)).when(caseDetailsRepository).findByReference(CASE_REFERENCE);
+
         when(caseDefinitionRepository.getCaseType(CASE_TYPE_ID)).thenReturn(caseType);
-        when(startEventOperation.triggerStartForCase(UID,
-                                                     JURISDICTION_ID,
-                                                     CASE_TYPE_ID,
-                                                     CASE_REFERENCE,
+        when(startEventOperation.triggerStartForCase(CASE_REFERENCE,
                                                      EVENT_TRIGGER_ID,
                                                      IGNORE)).thenReturn(startEventTrigger);
         when(startEventOperation.triggerStartForDraft(UID,
@@ -103,24 +121,25 @@ class DefaultGetEventTriggerOperationTest {
                                                       DRAFT_ID,
                                                       EVENT_TRIGGER_ID,
                                                       IGNORE)).thenReturn(startEventTrigger);
-        when(startEventOperation.triggerStartForCaseType(UID, JURISDICTION_ID, CASE_TYPE_ID, EVENT_TRIGGER_ID, IGNORE)).thenReturn(startEventTrigger);
         when(eventTriggerService.findCaseEvent(caseType, EVENT_TRIGGER_ID)).thenReturn(caseEvent);
         when(uiDefinitionRepository.getWizardPageCollection(CASE_TYPE_ID, EVENT_TRIGGER_ID)).thenReturn(wizardPageCollection);
         when(caseViewFieldBuilder.build(caseFields, eventFields, caseDetails.getData())).thenReturn(viewFields);
     }
 
-
     @Nested
     @DisplayName("for case type")
     class ForCaseType {
+
+        @BeforeEach
+        public void setup() {
+            when(startEventOperation.triggerStartForCaseType(CASE_TYPE_ID, EVENT_TRIGGER_ID, IGNORE)).thenReturn(startEventTrigger);
+        }
 
         @Test
         @DisplayName("should fail if no case details")
         void shouldFailIfNoCaseDetails() {
             startEventTrigger.setCaseDetails(null);
-            assertThrows(ResourceNotFoundException.class, () -> defaultGetEventTriggerOperation.executeForCaseType(UID,
-                                                                                                                   JURISDICTION_ID,
-                                                                                                                   CASE_TYPE_ID,
+            assertThrows(ResourceNotFoundException.class, () -> defaultGetEventTriggerOperation.executeForCaseType(CASE_TYPE_ID,
                                                                                                                    EVENT_TRIGGER_ID,
                                                                                                                    IGNORE));
         }
@@ -130,9 +149,7 @@ class DefaultGetEventTriggerOperationTest {
         void shouldFailIfNoCaseType() {
             when(caseDefinitionRepository.getCaseType(CASE_TYPE_ID)).thenReturn(null);
 
-            assertThrows(ResourceNotFoundException.class, () -> defaultGetEventTriggerOperation.executeForCaseType(UID,
-                                                                                                                   JURISDICTION_ID,
-                                                                                                                   CASE_TYPE_ID,
+            assertThrows(ResourceNotFoundException.class, () -> defaultGetEventTriggerOperation.executeForCaseType(CASE_TYPE_ID,
                                                                                                                    EVENT_TRIGGER_ID,
                                                                                                                    IGNORE));
         }
@@ -142,9 +159,7 @@ class DefaultGetEventTriggerOperationTest {
         void shouldFailIfNoEventTrigger() {
             when(eventTriggerService.findCaseEvent(caseType, EVENT_TRIGGER_ID)).thenReturn(null);
 
-            assertThrows(ResourceNotFoundException.class, () -> defaultGetEventTriggerOperation.executeForCaseType(UID,
-                                                                                                                   JURISDICTION_ID,
-                                                                                                                   CASE_TYPE_ID,
+            assertThrows(ResourceNotFoundException.class, () -> defaultGetEventTriggerOperation.executeForCaseType(CASE_TYPE_ID,
                                                                                                                    EVENT_TRIGGER_ID,
                                                                                                                    IGNORE));
         }
@@ -160,9 +175,7 @@ class DefaultGetEventTriggerOperationTest {
 
             caseEvent.setCaseFields(eventFields);
 
-            CaseEventTrigger caseEventTrigger = defaultGetEventTriggerOperation.executeForCaseType(UID,
-                                                                                                   JURISDICTION_ID,
-                                                                                                   CASE_TYPE_ID,
+            CaseEventTrigger caseEventTrigger = defaultGetEventTriggerOperation.executeForCaseType(CASE_TYPE_ID,
                                                                                                    EVENT_TRIGGER_ID,
                                                                                                    IGNORE);
             assertAll(
@@ -184,15 +197,39 @@ class DefaultGetEventTriggerOperationTest {
     class ForCase {
 
         @Test
+        @DisplayName("Should propagate bad request exception if case reference invalid")
+        void shouldPropagateBadRequestExceptionIfCaseReferenceInvalid() {
+
+            doReturn(false).when(uidService).validateUID(CASE_REFERENCE);
+
+            final Exception exception = assertThrows(BadRequestException.class, () -> defaultGetEventTriggerOperation.executeForCase(CASE_REFERENCE,
+                                                                                                         EVENT_TRIGGER_ID,
+                                                                                                         IGNORE));
+            assertThat(exception.getMessage(), startsWith("Case reference is not valid"));
+        }
+
+        @Test
+        @DisplayName("Should propagate case not found exception if no case")
+        void shouldPropagateCaseNotFoundExceptionIfCaseNotFound() {
+
+            doReturn(true).when(uidService).validateUID(CASE_REFERENCE);
+            doReturn(Optional.empty()).when(caseDetailsRepository).findByReference(CASE_REFERENCE);
+
+            final Exception exception = assertThrows(CaseNotFoundException.class, () -> defaultGetEventTriggerOperation.executeForCase(CASE_REFERENCE,
+                                                                                                           EVENT_TRIGGER_ID,
+                                                                                                           IGNORE));
+            assertThat(exception.getMessage(), startsWith("No case found for reference: " + CASE_REFERENCE));
+        }
+
+        @Test
         @DisplayName("should fail if no case details")
         void shouldFailIfNoCaseDetails() {
             startEventTrigger.setCaseDetails(null);
-            assertThrows(ResourceNotFoundException.class, () -> defaultGetEventTriggerOperation.executeForCase(UID,
-                                                                                                               JURISDICTION_ID,
-                                                                                                               CASE_TYPE_ID,
-                                                                                                               CASE_REFERENCE,
+
+            final Exception exception = assertThrows(ResourceNotFoundException.class, () -> defaultGetEventTriggerOperation.executeForCase(CASE_REFERENCE,
                                                                                                                EVENT_TRIGGER_ID,
                                                                                                                IGNORE));
+            assertThat(exception.getMessage(), startsWith("Case not found"));
         }
 
         @Test
@@ -200,12 +237,10 @@ class DefaultGetEventTriggerOperationTest {
         void shouldFailIfNoCaseType() {
             when(caseDefinitionRepository.getCaseType(CASE_TYPE_ID)).thenReturn(null);
 
-            assertThrows(ResourceNotFoundException.class, () -> defaultGetEventTriggerOperation.executeForCase(UID,
-                                                                                                               JURISDICTION_ID,
-                                                                                                               CASE_TYPE_ID,
-                                                                                                               CASE_REFERENCE,
+            final Exception exception = assertThrows(ResourceNotFoundException.class, () -> defaultGetEventTriggerOperation.executeForCase(CASE_REFERENCE,
                                                                                                                EVENT_TRIGGER_ID,
                                                                                                                IGNORE));
+            assertThat(exception.getMessage(), startsWith("Case type not found"));
         }
 
         @Test
@@ -213,10 +248,7 @@ class DefaultGetEventTriggerOperationTest {
         void shouldFailIfNoEventTrigger() {
             when(eventTriggerService.findCaseEvent(caseType, EVENT_TRIGGER_ID)).thenReturn(null);
 
-            assertThrows(ResourceNotFoundException.class, () -> defaultGetEventTriggerOperation.executeForCase(UID,
-                                                                                                               JURISDICTION_ID,
-                                                                                                               CASE_TYPE_ID,
-                                                                                                               CASE_REFERENCE,
+            assertThrows(ResourceNotFoundException.class, () -> defaultGetEventTriggerOperation.executeForCase(CASE_REFERENCE,
                                                                                                                EVENT_TRIGGER_ID,
                                                                                                                IGNORE));
         }
@@ -232,12 +264,17 @@ class DefaultGetEventTriggerOperationTest {
 
             caseEvent.setCaseFields(eventFields);
 
-            CaseEventTrigger caseEventTrigger = defaultGetEventTriggerOperation.executeForCase(UID,
-                                                                                               JURISDICTION_ID,
-                                                                                               CASE_TYPE_ID,
-                                                                                               CASE_REFERENCE,
+            CaseEventTrigger caseEventTrigger = defaultGetEventTriggerOperation.executeForCase(CASE_REFERENCE,
                                                                                                EVENT_TRIGGER_ID,
                                                                                                IGNORE);
+
+            InOrder inOrder = inOrder(caseDefinitionRepository,
+                                      caseDetailsRepository,
+                                      uiDefinitionRepository,
+                                      eventTriggerService,
+                                      caseViewFieldBuilder,
+                                      startEventOperation,
+                                      uidService);
             assertAll(
                 () -> assertThat(caseEventTrigger, hasProperty("id", equalTo(EVENT_TRIGGER_ID))),
                 () -> assertThat(caseEventTrigger, hasProperty("name", equalTo(EVENT_TRIGGER_NAME))),
@@ -247,8 +284,16 @@ class DefaultGetEventTriggerOperationTest {
                 () -> assertThat(caseEventTrigger, hasProperty("eventToken", equalTo(TOKEN))),
                 () -> assertThat(caseEventTrigger, hasProperty("caseId", equalTo(CASE_REFERENCE))),
                 () -> assertThat(caseEventTrigger, hasProperty("caseFields", equalTo(viewFields))),
-                () -> assertThat(caseEventTrigger, hasProperty("wizardPages", equalTo(wizardPageCollection)))
-            );
+                () -> assertThat(caseEventTrigger, hasProperty("wizardPages", equalTo(wizardPageCollection))),
+                () -> inOrder.verify(uidService).validateUID(CASE_REFERENCE),
+                () -> inOrder.verify(caseDetailsRepository).findByReference(CASE_REFERENCE),
+                () -> inOrder.verify(startEventOperation).triggerStartForCase(CASE_REFERENCE, EVENT_TRIGGER_ID, IGNORE),
+                () -> inOrder.verify(caseDefinitionRepository).getCaseType(CASE_TYPE_ID),
+                () -> inOrder.verify(eventTriggerService).findCaseEvent(caseType, EVENT_TRIGGER_ID),
+                () -> inOrder.verify(caseViewFieldBuilder).build(caseFields, eventFields, caseDetails.getCaseDataAndMetadata()),
+                () -> inOrder.verify(uiDefinitionRepository).getWizardPageCollection(CASE_TYPE_ID, EVENT_TRIGGER_ID),
+                () -> inOrder.verifyNoMoreInteractions()
+                );
         }
     }
 

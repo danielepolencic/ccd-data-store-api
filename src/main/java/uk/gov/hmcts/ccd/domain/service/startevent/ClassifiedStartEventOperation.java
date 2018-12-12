@@ -1,5 +1,7 @@
 package uk.gov.hmcts.ccd.domain.service.startevent;
 
+import java.util.HashMap;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.Maps;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -12,8 +14,6 @@ import uk.gov.hmcts.ccd.domain.model.definition.CaseType;
 import uk.gov.hmcts.ccd.domain.service.common.CaseDataService;
 import uk.gov.hmcts.ccd.domain.service.common.SecurityClassificationService;
 import uk.gov.hmcts.ccd.endpoint.exceptions.ValidationException;
-
-import java.util.HashMap;
 
 @Service
 @Qualifier("classified")
@@ -36,20 +36,15 @@ public class ClassifiedStartEventOperation implements StartEventOperation {
     }
 
     @Override
-    public StartEventTrigger triggerStartForCaseType(String uid, String jurisdictionId, String caseTypeId, String eventTriggerId, Boolean ignoreWarning) {
-        return startEventOperation.triggerStartForCaseType(uid,
-                                                           jurisdictionId,
-                                                           caseTypeId,
+    public StartEventTrigger triggerStartForCaseType(String caseTypeId, String eventTriggerId, Boolean ignoreWarning) {
+        return startEventOperation.triggerStartForCaseType(caseTypeId,
                                                            eventTriggerId,
                                                            ignoreWarning);
     }
 
     @Override
-    public StartEventTrigger triggerStartForCase(String uid, String jurisdictionId, String caseTypeId, String caseReference, String eventTriggerId, Boolean ignoreWarning) {
-        return applyClassificationIfCaseDetailsExist(startEventOperation.triggerStartForCase(uid,
-                                                                                             jurisdictionId,
-                                                                                             caseTypeId,
-                                                                                             caseReference,
+    public StartEventTrigger triggerStartForCase(String caseReference, String eventTriggerId, Boolean ignoreWarning) {
+        return applyClassificationIfCaseDetailsExist(startEventOperation.triggerStartForCase(caseReference,
                                                                                              eventTriggerId,
                                                                                              ignoreWarning));
     }

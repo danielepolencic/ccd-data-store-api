@@ -1,5 +1,10 @@
 package uk.gov.hmcts.ccd.domain.service.aggregated;
 
+import java.util.Set;
+import java.util.function.Supplier;
+
+import static uk.gov.hmcts.ccd.domain.service.common.AccessControlService.*;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
@@ -19,11 +24,6 @@ import uk.gov.hmcts.ccd.domain.service.common.UIDService;
 import uk.gov.hmcts.ccd.endpoint.exceptions.BadRequestException;
 import uk.gov.hmcts.ccd.endpoint.exceptions.ResourceNotFoundException;
 import uk.gov.hmcts.ccd.endpoint.exceptions.ValidationException;
-
-import java.util.Set;
-import java.util.function.Supplier;
-
-import static uk.gov.hmcts.ccd.domain.service.common.AccessControlService.*;
 
 @Service
 @Qualifier(AuthorisedGetEventTriggerOperation.QUALIFIER)
@@ -55,34 +55,27 @@ public class AuthorisedGetEventTriggerOperation implements GetEventTriggerOperat
         this.uidService = uidService;
     }
 
-    public CaseEventTrigger executeForCaseType(String uid,
-                                               String jurisdictionId,
-                                               String caseTypeId,
-                                               String eventTriggerId,
-                                               Boolean ignoreWarning) {
+    @Override
+    public CaseEventTrigger executeForCaseType(String caseTypeId, String eventTriggerId, Boolean ignoreWarning) {
         final CaseType caseType = caseDefinitionRepository.getCaseType(caseTypeId);
 
         Set<String> userRoles = getUserRoles();
 
         verifyRequiredAccessExistsForCaseType(eventTriggerId, caseType, userRoles);
 
-        return filterCaseFieldsByCreateAccess(caseType, userRoles, getEventTriggerOperation.executeForCaseType(uid,
-                                                           jurisdictionId,
-                                                           caseTypeId,
-                                                           eventTriggerId,
-                                                           ignoreWarning));
+        return filterCaseFieldsByCreateAccess(caseType, userRoles, getEventTriggerOperation.executeForCaseType(caseTypeId,
+                                                                                                               eventTriggerId,
+                                                                                                               ignoreWarning));
+
     }
 
-    public CaseEventTrigger executeForCase(String uid,
-                                           String jurisdictionId,
-                                           String caseTypeId,
-                                           String caseReference,
+    @Override
+    public CaseEventTrigger executeForCase(String caseReference,
                                            String eventTriggerId,
                                            Boolean ignoreWarning) {
-        final CaseType caseType = caseDefinitionRepository.getCaseType(caseTypeId);
-        final CaseEvent eventTrigger = getEventTrigger(caseTypeId, eventTriggerId, caseType);
-
         final CaseDetails caseDetails = getCaseDetails(caseReference);
+        final CaseType caseType = caseDefinitionRepository.getCaseType(caseDetails.getCaseTypeId());
+        final CaseEvent eventTrigger = getEventTrigger(eventTriggerId, caseType);
 
         validateEventTrigger(() -> !eventTriggerService.isPreStateValid(caseDetails.getState(), eventTrigger));
 
@@ -90,12 +83,9 @@ public class AuthorisedGetEventTriggerOperation implements GetEventTriggerOperat
 
         verifyMandatoryAccessForCase(eventTriggerId, caseDetails, caseType, userRoles);
 
-        return filterUpsertAccessForCase(caseType, userRoles, getEventTriggerOperation.executeForCase(uid,
-                                                       jurisdictionId,
-                                                       caseTypeId,
-                                                       caseReference,
-                                                       eventTriggerId,
-                                                       ignoreWarning));
+        return filterUpsertAccessForCase(caseType, userRoles, getEventTriggerOperation.executeForCase(caseReference,
+                                                                                                      eventTriggerId,
+                                                                                                      ignoreWarning));
     }
 
     @Override
@@ -108,11 +98,11 @@ public class AuthorisedGetEventTriggerOperation implements GetEventTriggerOperat
         verifyRequiredAccessExistsForCaseType(eventTriggerId, caseType, userRoles);
 
         return filterCaseFieldsByCreateAccess(caseType, userRoles, getEventTriggerOperation.executeForDraft(uid,
-            jurisdictionId,
-            caseTypeId,
-            draftReference,
-            eventTriggerId,
-            ignoreWarning));
+                                                                                                            jurisdictionId,
+                                                                                                            caseTypeId,
+                                                                                                            draftReference,
+                                                                                                            eventTriggerId,
+                                                                                                            ignoreWarning));
     }
 
     private CaseDetails getCaseDetails(String caseReference) {
@@ -194,10 +184,10 @@ public class AuthorisedGetEventTriggerOperation implements GetEventTriggerOperat
             CAN_UPDATE);
     }
 
-    private CaseEvent getEventTrigger(String caseTypeId, String eventTriggerId, CaseType caseType) {
+    private CaseEvent getEventTrigger(String eventTriggerId, CaseType caseType) {
         final CaseEvent eventTrigger = eventTriggerService.findCaseEvent(caseType, eventTriggerId);
         if (eventTrigger == null) {
-            throw new ResourceNotFoundException("Cannot findCaseEvent event " + eventTriggerId + " for case type " + caseTypeId);
+            throw new ResourceNotFoundException("Cannot find event " + eventTriggerId + " for case type " + caseType.getId());
         }
         return eventTrigger;
     }

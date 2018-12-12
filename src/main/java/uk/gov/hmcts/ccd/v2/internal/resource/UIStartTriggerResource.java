@@ -1,0 +1,37 @@
+package uk.gov.hmcts.ccd.v2.internal.resource;
+
+import static org.springframework.hateoas.mvc.ControllerLinkBuilder.linkTo;
+import static org.springframework.hateoas.mvc.ControllerLinkBuilder.methodOn;
+
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
+import lombok.NonNull;
+import org.springframework.hateoas.ResourceSupport;
+import uk.gov.hmcts.ccd.domain.model.aggregated.CaseEventTrigger;
+import uk.gov.hmcts.ccd.v2.internal.controller.UIStartTriggerController;
+
+@Data
+@EqualsAndHashCode(callSuper = true)
+@NoArgsConstructor
+public class UIStartTriggerResource extends ResourceSupport {
+
+    @JsonUnwrapped
+    private CaseEventTrigger caseEventTrigger;
+
+    public UIStartTriggerResource(@NonNull CaseEventTrigger caseEventTrigger, String caseTypeId, Boolean ignoreWarning, Boolean withCase) {
+        copyProperties(caseEventTrigger);
+
+        if (withCase) {
+            add(linkTo(methodOn(UIStartTriggerController.class).getStartEventTrigger(caseEventTrigger.getCaseId(), caseEventTrigger.getId(), ignoreWarning))
+                    .withSelfRel());
+        } else {
+            add(linkTo(methodOn(UIStartTriggerController.class).getStartCaseTrigger(caseTypeId, caseEventTrigger.getId(), ignoreWarning)).withSelfRel());
+        }
+    }
+
+    private void copyProperties(CaseEventTrigger caseEventTrigger) {
+        this.caseEventTrigger = caseEventTrigger;
+    }
+}
