@@ -31,6 +31,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import uk.gov.hmcts.ccd.data.casedetails.CaseDetailsRepository;
 import uk.gov.hmcts.ccd.data.definition.CaseDefinitionRepository;
+import uk.gov.hmcts.ccd.data.draft.DraftGateway;
 import uk.gov.hmcts.ccd.data.user.UserRepository;
 import uk.gov.hmcts.ccd.domain.model.callbacks.StartEventTrigger;
 import uk.gov.hmcts.ccd.domain.model.definition.CaseDetails;
@@ -70,6 +71,9 @@ class AuthorisedStartEventOperationTest {
     private AuthorisedStartEventOperation authorisedStartEventOperation;
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private DraftGateway draftGateway;
+
     @Mock
     private UIDService uidService;
 
@@ -119,7 +123,8 @@ class AuthorisedStartEventOperationTest {
                                                                           caseDetailsRepository,
                                                                           accessControlService,
                                                                           uidService,
-                                                                          userRepository);
+                                                                          userRepository,
+                                                                          draftGateway);
         caseType.setCaseFields(caseFields);
         when(caseDefinitionRepository.getCaseType(CASE_TYPE_ID)).thenReturn(caseType);
         when(userRepository.getUserRoles()).thenReturn(userRoles);

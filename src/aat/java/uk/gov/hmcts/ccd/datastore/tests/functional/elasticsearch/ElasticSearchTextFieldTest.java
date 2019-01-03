@@ -1,6 +1,6 @@
 package uk.gov.hmcts.ccd.datastore.tests.functional.elasticsearch;
 
-import static uk.gov.hmcts.ccd.datastore.tests.fixture.AATCaseBuilder.FullCase.TEXT;
+import static uk.gov.hmcts.ccd.datastore.tests.fixture.AATCaseBuilder.TEXT;
 import static uk.gov.hmcts.ccd.datastore.tests.fixture.AATCaseType.State;
 
 import io.restassured.response.ValidatableResponse;

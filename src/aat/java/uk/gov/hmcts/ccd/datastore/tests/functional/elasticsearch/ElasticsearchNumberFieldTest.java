@@ -1,6 +1,6 @@
 package uk.gov.hmcts.ccd.datastore.tests.functional.elasticsearch;
 
-import static uk.gov.hmcts.ccd.datastore.tests.fixture.AATCaseBuilder.FullCase.NUMBER;
+import static uk.gov.hmcts.ccd.datastore.tests.fixture.AATCaseBuilder.NUMBER;
 
 import io.restassured.response.ValidatableResponse;
 import org.junit.jupiter.api.BeforeAll;
